@@ -52,8 +52,82 @@ This project demonstrates a production-style FastAPI architecture suitable for r
 Create a file named `.env` in the project root:
 
 ```env
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=123@Password
-POSTGRES_DB=company_db
+POSTGRES_USER=your_db_user
+POSTGRES_PASSWORD=your_secure_password
+POSTGRES_DB=your_database_name
 
-DATABASE_URL=postgresql://postgres:123@Password@postgres:5432/company_db
+DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+```
+
+> Note: Inside Docker, the host is `postgres`, not `localhost`.
+
+---
+
+### 2️⃣ Start everything
+
+```bash
+docker compose up --build
+```
+
+Then open:
+
+```
+http://localhost:8000/docs
+```
+
+---
+
+## 🔐 How to authenticate (Swagger)
+
+1. Go to `/docs`
+2. Call `POST /login`
+3. Copy the `access_token`
+4. Click **Authorize (🔐)**
+5. Paste:
+
+```
+Bearer <your-token>
+```
+
+6. Now you can use all `/todos` endpoints.
+
+---
+
+## 📁 Project Structure
+
+```
+fastapi-todo/
+├── app/
+│   ├── main.py
+│   ├── db.py
+│   ├── models.py
+│   ├── crud.py
+│   ├── schema.py
+│   ├── auth.py
+│   └── logging_config.py
+├── docker-compose.yml
+├── Dockerfile
+├── .env
+├── requirements.txt
+└── README.md
+```
+
+---
+
+## 🎯 What I learned building this
+
+* Designing REST APIs with FastAPI
+* Securing endpoints using JWT
+* Working with PostgreSQL via SQLAlchemy
+* Containerizing apps with Docker Compose
+* Writing middleware for logging
+
+---
+
+## 📜 License
+
+```
+MIT License.
+```
+
+---
