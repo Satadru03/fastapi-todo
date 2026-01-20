@@ -1,173 +1,112 @@
-def create_user(db, user, password_hash):
-    with db.cursor() as cursor:
+from sqlalchemy.orm import Session
+from app.models import User, Todo
 
-        cursor.execute(
-            "SELECT username FROM users WHERE username = %s",
-            (user.username,)
-        )
-        if cursor.fetchone():
-            return None
-        
-        cursor.execute(
-            "INSERT INTO users (username, age, email, password_hash) VALUES (%s, %s, %s, %s)",
-            (user.username, user.age, user.email, password_hash)
-        )
+# ---------------- USERS ---------------- #
+
+def create_user(db: Session, user, password_hash):
+    # check if user exists
+    existing = db.query(User).filter(User.username == user.username).first()
+    if existing:
+        return None
+
+    db_user = User(
+        username=user.username,
+        age=user.age,
+        email=user.email,
+        password=password_hash
+    )
+
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
+def get_all_users(db: Session):
+    return db.query(User).all()
+
+
+def get_user(db: Session, username: str):
+    return db.query(User).filter(User.username == username).first()
+
+
+def update_user(db: Session, username: str, user_update):
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        return None
+
+    user.age = user_update.age
+    user.email = user_update.email
 
     db.commit()
+    db.refresh(user)
     return user
 
-def get_all_users(db):
-    with db.cursor() as cursor:
-        cursor.execute("SELECT username, age, email FROM users")
-        rows = cursor.fetchall()
 
-    users = []
-    for row in rows:
-        users.append({
-            "username": row[0],
-            "age": row[1],
-            "email": row[2]
-        })
-    return users
+def login(db: Session, username: str):
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        return None
+    return user.password
 
-def get_user(db, username: str):
-    with db.cursor() as cursor:
-        cursor.execute(
-            "SELECT username, age, email FROM users WHERE username = %s",
-            (username,)
-        )
-        row = cursor.fetchone()
 
-        if not row:
-            return None
-    return {
-        "username": row[0],
-        "age": row[1],
-        "email": row[2]
-    }
+def delete_user(db: Session, username: str):
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        return None
 
-def update_user(db, username: str, user_update):
-    with db.cursor() as cursor:
-        cursor.execute(
-            "SELECT username FROM users WHERE username = %s",
-            (username,)
-        )
-
-        if not cursor.fetchone():
-            return None
-        
-        cursor.execute(
-            "UPDATE users SET age = %s, email = %s WHERE username = %s",
-            (user_update.age, user_update.email, username)
-        )
-
-    db.commit()
-    return {
-        "username": username,
-        "age": user_update.age,
-        "email": user_update.email
-    }
-
-def login(db, username:str):
-    with db.cursor() as cursor:
-        cursor.execute(
-            "SELECT password_hash FROM users WHERE username = %s",
-            (username,)
-        )
-        row = cursor.fetchone()
-
-        if not row:
-            return None
-        
-        return row[0]
-
-def delete_user(db, username: str):
-    with db.cursor() as cursor:
-        cursor.execute(
-            "SELECT username FROM users WHERE username = %s",
-            (username,)
-        )
-
-        if not cursor.fetchone():
-            return None
-        
-        cursor.execute(
-            "DELETE FROM users WHERE username = %s",
-            (username,)
-        )
-
+    db.delete(user)
     db.commit()
     return True
 
-def create_todos(db, username: str, title: str):
-    with db.cursor() as cursor:
-        cursor.execute(
-            "INSERT INTO todos (title, owner_username) VALUES (%s, %s)",
-            (title, username)
-        )
-        row = cursor.fetchone()
+
+# ---------------- TODOS ---------------- #
+
+def create_todos(db: Session, username: str, title: str):
+    todo = Todo(
+        title=title,
+        owner=username,
+        completed=False
+    )
+
+    db.add(todo)
     db.commit()
-    return {
-        "id": row[0],
-        "title": title,
-        "completed": row[1]
-    }
+    db.refresh(todo)
+    return todo
 
-def get_todos(db, username: str):
-    with db.cursor() as cursor:
-        cursor.execute(
-            "SELECT id, title, completed FROM todos WHERE owner_username = %s",
-            (username,)
-        )
-        rows = cursor.fetchall()
-    
-    todos = []
-    for row in rows:
-        todos.append({
-        "id": row[0],
-        "title": row[1],
-        "completed": row[2]
-    })
-    return todos
 
-def update_todo(db, id: int, username:str, todo_update):
-    with db.cursor() as cursor:
-        cursor.execute(
-            "SELECT id, title, completed FROM todos WHERE id = %s AND owner_username = %s",
-            (id, username)
-        )
-        row = cursor.fetchone()
+def get_todos(db: Session, username: str):
+    return db.query(Todo).filter(Todo.owner == username).all()
 
-        if not row:
-            return None
-        
-        cursor.execute(
-                "UPDATE todos SET title = %s, completed = %s WHERE id = %s AND owner_username = %s",
-                (todo_update.title, todo_update.completed, id, username)
-            )
+
+def update_todo(db: Session, id: int, username: str, todo_update):
+    todo = (
+        db.query(Todo)
+        .filter(Todo.id == id, Todo.owner == username)
+        .first()
+    )
+
+    if not todo:
+        return None
+
+    todo.title = todo_update.title
+    todo.completed = todo_update.completed
 
     db.commit()
+    db.refresh(todo)
+    return todo
 
-    return {
-        "id": id,
-        "title": todo_update.title,
-        "completed": todo_update.completed
-    }
 
-def delete_todo(db, username: str, id: int):
-    with db.cursor() as cursor:
-        cursor.execute(
-            "SELECT id FROM todos WHERE id = %s AND  owner_username = %s",
-            (id, username)
-        )
+def delete_todo(db: Session, username: str, id: int):
+    todo = (
+        db.query(Todo)
+        .filter(Todo.id == id, Todo.owner == username)
+        .first()
+    )
 
-        if not cursor.fetchone():
-            return None
-        
-        cursor.execute(
-            "DELETE FROM todos WHERE id = %s AND owner_username = %s",
-            (id, username)
-        )
+    if not todo:
+        return None
 
+    db.delete(todo)
     db.commit()
     return True

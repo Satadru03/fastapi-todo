@@ -8,18 +8,22 @@
 #http://127.0.0.1:8000/docs
 
 from fastapi import FastAPI, HTTPException, Depends, Request
-from schema import UserCreate, UserResponse, UserUpdate, APIResponse, Token, TodoCreate, TodoResponse, TodoUpdate
-from typing import List
-from db import get_db_connection
-import crud
-from auth import hash_password, verify_password, create_access_token
-from auth import get_current_user
 from fastapi.responses import JSONResponse
+from typing import List
+from fastapi.security import OAuth2PasswordRequestForm
 from time import time
-import logging_config
-from logging_config import logger
+
+from app.schema import UserCreate, UserResponse, UserUpdate, APIResponse, Token, TodoCreate, TodoResponse, TodoUpdate
+import app.crud as crud
+from app.auth import hash_password, verify_password, create_access_token, get_current_user
+import app.logging_config as logging_config
+from app.logging_config import logger
+
+from app.db import get_db, engine
+from app.models import Base
 
 app = FastAPI()
+Base.metadata.create_all(bind=engine)
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
@@ -46,12 +50,9 @@ async def log_requests(request: Request, call_next):
 
     return response
 
-def get_db():
-    conn = get_db_connection()
-    try:
-        yield conn
-    finally:
-        conn.close()
+@app.get("/")
+def root():
+    return {"status": "ok"}
 
 @app.get("/me")
 def read_me(current_user: str = Depends(get_current_user)): 
@@ -92,19 +93,23 @@ def update_user_api(username: str, user_update: UserUpdate, db = Depends(get_db)
         raise HTTPException(status_code = 404, detail = "User not found")
     return result
 
-@app.post("/login", response_model = Token)
-def login_api(username: str, password: str, db = Depends(get_db)):
-    result = crud.login(db, username)
-    if not verify_password(password, result):
-        raise HTTPException(status_code = 401, detail = "Invalid password")
-    
-    token = create_access_token({"sub": username})
+@app.post("/login", response_model=Token)
+def login_api(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db = Depends(get_db)
+):
+    user = crud.login(db, form_data.username)
+
+    if not user or not verify_password(form_data.password, user):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    token = create_access_token({"sub": form_data.username})
 
     return {
         "access_token": token,
         "token_type": "bearer"
     }
-
+    
 @app.delete("/users/{username}")
 def delete_user_api(username: str, db = Depends(get_db)):
     result = crud.delete_user(db, username)
@@ -126,7 +131,7 @@ def get_todos_api(current_user: str = Depends(get_current_user), db = Depends(ge
 
 @app.put("/todos", response_model = TodoResponse)
 def update_todo_api(id: int, todo_update: TodoUpdate, current_user: str = Depends(get_current_user), db = Depends(get_db)):
-    result = crud.update_todos(db, id, current_user, todo_update)
+    result = crud.update_todo(db, id, current_user, todo_update)
 
     if not result:
         raise HTTPException(status_code=404, detail="Todo not found")
@@ -135,7 +140,7 @@ def update_todo_api(id: int, todo_update: TodoUpdate, current_user: str = Depend
 
 @app.delete("/todos/{id}")
 def delete_todo_api(id: int, current_user: str = Depends(get_current_user), db = Depends(get_db)):
-    result = crud.delete_todos(db, current_user, id)
+    result = crud.delete_todo(db, current_user, id)
 
     if not result:
         raise HTTPException(status_code=404, detail="Todo not found")
